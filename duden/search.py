@@ -4,8 +4,10 @@ Network requests-related functions
 """
 
 import gzip
+import json
 from pathlib import Path
 import string
+from urllib.parse import unquote as url_unquote
 
 import bs4
 import requests
@@ -17,7 +19,7 @@ from .common import clear_text
 
 URL_FORM = 'https://www.duden.de/rechtschreibung/{word}'
 SEARCH_URL_FORM = 'https://www.duden.de/suchen/dudenonline/{word}'
-
+AUTOCOMPLETE_URL = 'https://www.duden.de/search_api_autocomplete/dictionary_search?display=page_1&&filter=search_api_fulltext&q={word}&scope=dictionary'
 
 def sanitize_word(word):
     """
@@ -126,23 +128,42 @@ def request_search(word):
     url = SEARCH_URL_FORM.format(word=word)
     return requests.get(url).text
 
+@cached_response(prefix='autocomplete-')
+def request_autocomplete(word):
+    """
+    Request autocomplete results from duden
+    """
+    url = AUTOCOMPLETE_URL.format(word=word)
+    req = requests.get(url)
+    if req.ok: 
+        return req.text
+    else:
+        return []
 
-def search(word, exact=True, return_words=True, cache=True):
+def search(word, exact=True, return_words=True, cache=True, autocomplete=False):
     """
     Search for a word 'word' in duden
     """
-    response_text = request_search(word, cache=cache)  # pylint: disable=unexpected-keyword-arg
-    soup = bs4.BeautifulSoup(response_text, 'html.parser')
-    definitions = soup.find_all('h2', class_='vignette__title')
-
-    if definitions is None:
-        return []
-
     urlnames = []
-    for definition in definitions:
-        definition_title = definition.text
-        if (not exact) or word in get_search_link_variants(definition_title):
-            urlnames.append(definition.find('a')['href'].split('/')[-1])
+    if autocomplete is True:
+        response_text = request_autocomplete(word, cache=cache)  # pylint: disable=unexpected-keyword-arg
+        response_json = json.loads(response_text)
+
+        if len(response_json) > 0:
+            for definition in response_json:
+                urlnames.append(url_unquote(definition['value'].split('/')[-1]))
+    else:
+        response_text = request_search(word, cache=cache)  # pylint: disable=unexpected-keyword-arg
+        soup = bs4.BeautifulSoup(response_text, 'html.parser')
+        definitions = soup.find_all('h2', class_='vignette__title')
+
+        if definitions is None:
+            return []
+
+        for definition in definitions:
+            definition_title = definition.text
+            if (not exact) or word in get_search_link_variants(definition_title):
+                urlnames.append(definition.find('a')['href'].split('/')[-1])
 
     if not return_words:
         return urlnames

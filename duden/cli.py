@@ -125,6 +125,10 @@ def parse_args():
                         help=_('display pronunciation'))
     parser.add_argument('--alternative-spellings', action='store_true',
                         help=_('display alternative spellings'))
+    parser.add_argument('--autocomplete', type=bool,
+                        help=_('use autocomplete search api -> may contain None'
+                               ' if more than one occurency of a search result '
+                               'exists in database.'), default=False)
 
     return parser.parse_args()
 
@@ -144,7 +148,7 @@ def main():
 
     # search all words matching the string
     words = search(args.word, return_words=False, exact=not args.fuzzy,
-                   cache=args.cache)
+                   cache=args.cache, autocomplete=args.autocomplete)
 
     # exit if the word wasn't found
     if not words:
